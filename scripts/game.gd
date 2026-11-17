@@ -18,8 +18,7 @@ const RESPAWN_FEET_Y := STREET_SURFACE_Y + 0.8
 const FALL_GRAVITY := 26.0
 const ROPE_Y := 44.87
 const STATIC_SAG := 0.25
-const LOAD_SAG := 0.9
-const FIRST_THREE_LOAD_SAG := 1.5
+const LOAD_SAG := 1.5
 const ROPE_SEGMENTS := 26
 const ROPE_RADIUS := 0.045
 const BALANCE_POLE_RADIUS := 0.055
@@ -31,6 +30,11 @@ const POLE_WAIST_Y := 1.9
 const POLE_FRONT_Z := -0.45
 const POLE_HAND_SPACING := 0.65
 const BIRD_HOVER_HEIGHT := 3.5
+const BIRD_NIGHT_EMISSION := Color("c7d4ff")
+const BIRD_NIGHT_GLOW := 0.6
+const BIRD_MARKER_HEIGHT := 0.7
+const CENTER_BIRD_MARKER_COLOR := Color("ffca62")
+const FLANKER_MARKER_COLOR := Color("fff4e4")
 const BIRD_TIMER_GAP_PIXELS := 5.0
 const GUST_TIMER_GAP_PIXELS := 8.0
 const GUST_TIMER_WIDTH := 100.0
@@ -45,21 +49,21 @@ const TAILLIGHT_GLOW_ENERGY := 4.8
 const BEACON_BUILDING_INDICES := [3, 8, 14, 19]
 const RED_BEACON_PERIOD := 1.5
 const RED_BEACON_FLASH_DURATION := 0.24
-const SKY_TOP_COLORS := ["2377c9", "674790", "111839", "08091b"]
-const SKY_MID_COLORS := ["65b5ee", "e87ca4", "51427f", "0d1030"]
-const SKY_HORIZON_COLORS := ["c9ecff", "ffad62", "9279ac", "12122c"]
-const SUN_ELEVATIONS := [20.0, 7.0, -12.0, -12.0, -12.0]
-const MOON_ELEVATIONS := [-3.0, -3.0, -3.0, 12.0, 22.0]
-const AMBIENT_COLORS := ["b8d9ff", "ffc1a8", "8076b2", "5c5c9c"]
-const KEY_LIGHT_COLORS := ["fff0d1", "ffb577", "a8a6d9", "b5bbff"]
-const KEY_LIGHT_ENERGIES := [1.1, 0.72, 0.24, 0.2]
-const AMBIENT_ENERGIES := [0.65, 0.43, 0.17, 0.10]
-const DARKNESS_ALPHAS := [0.0, 0.04, 0.17, 0.22]
-const FOG_DENSITIES := [0.28, 0.65, 0.88, 1.0]
-const FOG_DEPTH_BEGINS := [120.0, 80.0, 60.0, 45.0]
-const FOG_DEPTH_ENDS := [700.0, 570.0, 460.0, 400.0]
-const FOG_HEIGHT_DENSITIES := [0.012, 0.025, 0.034, 0.04]
-const LIT_SOURCE_GLOW_FACTORS := [0.04, 0.35, 0.72, 1.0]
+const SKY_TOP_COLORS := ["2377c9", "674790", "08091b"]
+const SKY_MID_COLORS := ["65b5ee", "e87ca4", "0d1030"]
+const SKY_HORIZON_COLORS := ["c9ecff", "ffad62", "12122c"]
+const SUN_ELEVATIONS := [20.0, 7.0, -12.0, -12.0]
+const MOON_ELEVATIONS := [-3.0, -3.0, 6.0, 24.0]
+const AMBIENT_COLORS := ["b8d9ff", "ffc1a8", "5c5c9c"]
+const KEY_LIGHT_COLORS := ["fff0d1", "ffb577", "b5bbff"]
+const KEY_LIGHT_ENERGIES := [1.1, 0.72, 0.2]
+const AMBIENT_ENERGIES := [0.65, 0.43, 0.10]
+const DARKNESS_ALPHAS := [0.0, 0.04, 0.22]
+const FOG_DENSITIES := [0.28, 0.65, 1.0]
+const FOG_DEPTH_BEGINS := [120.0, 80.0, 45.0]
+const FOG_DEPTH_ENDS := [700.0, 570.0, 400.0]
+const FOG_HEIGHT_DENSITIES := [0.012, 0.025, 0.04]
+const LIT_SOURCE_GLOW_FACTORS := [0.04, 0.35, 1.0]
 const STAGE_SKY_BLEND_SPEED := 0.8
 const ROOF_SPIKE_COLOR := Color("7c829e")
 const SNOW_LAYER_THICKNESS := 0.22
@@ -346,7 +350,7 @@ func _stargaze() -> void:
 	mode = "outro"
 	outro_elapsed = 0.0
 	hud.hide_win()
-	hud.show_caption("You made it. Four towers, one night, no looking back.")
+	hud.show_caption("You made it. Four towers, three crossings, no looking back.")
 
 
 func _toggle_pause() -> void:
@@ -405,8 +409,6 @@ func _update_walker(dt: float) -> void:
 		var load_sag := _load_rope_sag(tower_number) * 4.0 * s * (1.0 - s) * (1.0 - 0.55 * rules.tension)
 		feet.y -= (sag + load_sag) * _rope_sag_factor(rope, tower_number)
 		feet.x = rules.tilt * 0.35
-		if rules.sway_enabled():
-			feet.x += rules.sway * 1.6 * sin(PI * s)
 	if rules.state == "falling":
 		if not fall_started:
 			_start_fall()
@@ -456,6 +458,52 @@ func _update_birds() -> void:
 			else:
 				bird.position = hover_position
 				bird.rotation.y = -PI * 0.5 * rules.bird_dirs[index]
+
+
+## The swamphen model is dark plumage. Give every surface a pale emission that the
+## atmosphere scales with darkness (off in daylight, full at night) so the birds
+## stay readable against the night sky without changing the minigame.
+func _brighten_bird_for_night(bird: Node3D) -> void:
+	for found in bird.find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := found as MeshInstance3D
+		if mesh_instance == null or mesh_instance.mesh == null:
+			continue
+		for surface in mesh_instance.mesh.get_surface_count():
+			var source := mesh_instance.get_active_material(surface) as StandardMaterial3D
+			if source == null:
+				continue
+			var material := source.duplicate() as StandardMaterial3D
+			material.emission_enabled = true
+			material.emission = BIRD_NIGHT_EMISSION
+			material.emission_energy_multiplier = BIRD_NIGHT_GLOW * _lit_source_glow_factor
+			mesh_instance.set_surface_override_material(surface, material)
+			_emissive_materials.append({"material": material, "energy": BIRD_NIGHT_GLOW})
+
+
+## A flat arrowhead above each bird pointing the way the bird faces (local -Z), so
+## the direction reads by shape, not only by the model's pose or colour. The centre
+## bird's marker is larger and gold; the flankers' are smaller and cream.
+func _bird_direction_marker(is_center: bool) -> MeshInstance3D:
+	var size := 0.42 if is_center else 0.3
+	var mesh := ArrayMesh.new()
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([
+		Vector3(0.0, 0.0, -size * 1.3),
+		Vector3(0.0, size * 0.5, 0.0),
+		Vector3(0.0, -size * 0.5, 0.0),
+	])
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var marker := MeshInstance3D.new()
+	marker.name = "Direction Marker"
+	marker.mesh = mesh
+	var material := StandardMaterial3D.new()
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	material.albedo_color = CENTER_BIRD_MARKER_COLOR if is_center else FLANKER_MARKER_COLOR
+	marker.material_override = material
+	marker.position = Vector3(0.0, BIRD_MARKER_HEIGHT, 0.0)
+	return marker
 
 
 func _update_gust_visual() -> void:
@@ -565,8 +613,6 @@ func _rope_point(tower_number: int, s: float, current: Dictionary) -> Vector3:
 	var sag_factor := _rope_sag_factor(current, tower_number)
 	var y := ROPE_Y - STATIC_SAG * 4.0 * s * (1.0 - s) * sag_factor
 	var x := 0.0
-	if tower_number == rules.tower and rules.sway_enabled():
-		x += rules.sway * 1.6 * sin(PI * s)
 	if not current.is_empty() and tower_number == current["tower"]:
 		var load: float = current["progress"]
 		var triangle := s / load if s <= load and load > 0.0 else ((1.0 - s) / (1.0 - load) if s > load and load < 1.0 else 0.0)
@@ -575,8 +621,8 @@ func _rope_point(tower_number: int, s: float, current: Dictionary) -> Vector3:
 	return Vector3(x, y, z)
 
 
-func _load_rope_sag(tower_number: int) -> float:
-	return FIRST_THREE_LOAD_SAG if tower_number <= 3 else LOAD_SAG
+func _load_rope_sag(_tower_number: int) -> float:
+	return LOAD_SAG
 
 
 func _rope_sag_factor(current: Dictionary, tower_number: int) -> float:
@@ -641,19 +687,19 @@ func _update_hud() -> void:
 	if rules.state == "falling":
 		cue = "Falling"
 	elif rules.on_rope:
-		match rules.stage_kind():
-			"Wind": cue = "Watch for the flag"
-			"Birds": cue = "Center bird: Q / P  %.1fs" % rules.bird_timer if rules.bird_phase == "warn" else ("Bird gust!" if rules.bird_gust_timer > 0.0 else ("" if rules.bird_phase == "approach" else "Watch for the birds"))
-			"Tension": cue = "Tension: %.0f%%" % [rules.tension * 100.0]
-			"Sway":
-				if rules.bird_phase == "warn":
-					cue = "Center bird: Q / P  %.1fs" % rules.bird_timer
-				elif rules.wind_phase == "cue" or rules.wind_phase == "react":
-					cue = "Watch for the flag"
-				elif rules.bird_gust_timer > 0.0:
-					cue = "Bird gust!"
-				else:
-					cue = "Sway: %.0f%%" % [rules.sway * 100.0]
+		if rules.birds_enabled() and rules.bird_phase == "warn":
+			cue = "Center bird: Q / P  %.1fs" % rules.bird_timer
+		elif rules.birds_enabled() and rules.bird_gust_timer > 0.0:
+			cue = "Bird gust!"
+		elif rules.wind_phase == "cue" or rules.wind_phase == "react":
+			cue = "Watch for the flag"
+		elif rules.birds_enabled() and rules.bird_phase == "approach":
+			cue = ""
+		else:
+			match rules.stage_kind():
+				"Wind": cue = "Watch for the flag"
+				"Birds": cue = "Watch for the birds"
+				"Tension": cue = "Tension: %.0f%%" % [rules.tension * 100.0]
 	hud.show_status(rules.tower, rules.step, Rules.STEPS_PER_TOWER, rules.stage_kind(), rules.tilt, cue, rules.tension, rules.time)
 	var space_action := ""
 	if mode == "walking" and not paused:
@@ -693,8 +739,8 @@ func _update_atmosphere(dt: float) -> void:
 	var moon_elevation := _stage_value(MOON_ELEVATIONS, course_progress)
 	var sun_direction := Vector3(0.35, sin(deg_to_rad(sun_elevation)), -1.0).normalized()
 	var moon_direction := Vector3(-0.35, sin(deg_to_rad(moon_elevation)), -1.0).normalized()
-	var sun_strength := 1.0 - smoothstep(1.6, 2.0, _sky_stage)
-	var moon_strength := smoothstep(1.8, 2.15, _sky_stage) * 0.56
+	var sun_strength := 1.0 - smoothstep(1.4, 1.9, _sky_stage)
+	var moon_strength := smoothstep(1.5, 2.0, _sky_stage) * 0.56
 	var horizon := _stage_color(SKY_HORIZON_COLORS, _sky_stage)
 	_sky_material.set_shader_parameter("sky_top_color", _stage_color(SKY_TOP_COLORS, _sky_stage))
 	_sky_material.set_shader_parameter("sky_mid_color", _stage_color(SKY_MID_COLORS, _sky_stage))
@@ -728,7 +774,7 @@ func _update_atmosphere(dt: float) -> void:
 			light.light_energy = float(entry["energy"]) * glow_factor
 	_key_light.light_color = _stage_color(KEY_LIGHT_COLORS, _sky_stage)
 	_key_light.light_energy = _stage_value(KEY_LIGHT_ENERGIES, _sky_stage)
-	_key_light.look_at(_key_light.global_position - sun_direction.lerp(moon_direction, smoothstep(1.5, 2.2, _sky_stage)).normalized(), Vector3.UP)
+	_key_light.look_at(_key_light.global_position - sun_direction.lerp(moon_direction, smoothstep(1.3, 2.0, _sky_stage)).normalized(), Vector3.UP)
 	_moon_glow.light_energy = moon_strength
 	_moon_glow.look_at(_moon_glow.global_position - moon_direction, Vector3.UP)
 	_darkness.color = Color(0.01, 0.015, 0.04, _stage_value(DARKNESS_ALPHAS, _sky_stage))
@@ -898,6 +944,8 @@ func _build_world() -> void:
 		if bird_animation != null and bird_animation.has_animation(BIRD_FLY_ANIMATION):
 			bird_animation.get_animation(BIRD_FLY_ANIMATION).loop_mode = Animation.LOOP_LINEAR
 			bird_animation.play(BIRD_FLY_ANIMATION)
+		_brighten_bird_for_night(bird)
+		bird.add_child(_bird_direction_marker(bird_number == 1))
 		birds.append(bird)
 	snow = CPUParticles3D.new()
 	snow.amount = 300

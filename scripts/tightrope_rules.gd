@@ -2,8 +2,8 @@ class_name TightropeRules
 extends RefCounted
 ## Pure gameplay rules ported from TightropeRules.luau.
 
-const TOWER_COUNT := 4
-const STEPS_PER_TOWER := 9
+const TOWER_COUNT := 3
+const STEPS_PER_TOWER := 13
 const TOWER_SPACING := 62.0
 const ROOFTOP_START_OFFSET := 15.0
 const ROOF_FRONT_EDGE_OFFSET := 16.0
@@ -34,14 +34,10 @@ const BIRD_GUST_IMPULSE := 1.2
 const INTERRUPTION_SAFE_PERIOD := 1.0
 const TENSION_RATE := 0.11
 const TENSION_COUNTDOWN_START := 0.8
-const TENSION_PER_STEP := 0.07
+const TENSION_PER_STEP := 0.05
 const TENSION_JITTER := 0.8
 const RELEASE_COOLDOWN := 0.5
-const SWAY_SPEED := 1.5
-const SWAY_PUSH := 0.55
-const SWAY_WINDOW := 0.35
-const SWAY_SHOVE := 1.4
-const STAGES := ["Wind", "Birds", "Tension", "Sway"]
+const STAGES := ["Wind", "Birds", "Tension"]
 const BIRD_PATTERNS := [[-1, -1, -1], [1, 1, 1], [-1, 1, -1], [1, -1, 1]]
 
 var tower := 1
@@ -78,7 +74,6 @@ var bird_response := 0
 var bird_gust_timer := 0.0
 var interruption_safe_timer := 0.0
 var tension := 0.0
-var sway := 0.0
 var push := 0.0
 var _rng := RandomNumberGenerator.new()
 
@@ -121,23 +116,15 @@ func stage_kind() -> String:
 
 
 func birds_enabled() -> bool:
-	return tower == 2 or tower == 4
+	return tower >= 2
 
 
 func tension_enabled() -> bool:
 	return tower >= 3
 
 
-func sway_enabled() -> bool:
-	return tower == 4
-
-
 static func bird_check(response_direction: int, direction: int) -> bool:
 	return response_direction == direction
-
-
-static func sway_safe(value: float) -> bool:
-	return absf(value) < SWAY_WINDOW
 
 
 func update(delta: float, lean: float, gust_response: int = 0) -> Array[Dictionary]:
@@ -158,43 +145,42 @@ func update(delta: float, lean: float, gust_response: int = 0) -> Array[Dictiona
 	var stage_push := sin(time * 1.7) * WOBBLE + sin(time * 3.1 + 1.0) * WOBBLE * 0.45
 	if WIND_ENABLED:
 		stage_push += _update_wind(dt, gust_response, events)
-	match stage_kind():
-		"Birds", "Sway":
-			if bird_gust_timer > 0.0:
-				bird_gust_timer = maxf(0.0, bird_gust_timer - dt)
+	if birds_enabled():
+		if bird_gust_timer > 0.0:
+			bird_gust_timer = maxf(0.0, bird_gust_timer - dt)
+			stage_push -= bird_dir * BIRD_GUST_PUSH
+			if bird_gust_timer <= 0.0:
+				interruption_safe_timer = INTERRUPTION_SAFE_PERIOD
+		var bird_had_time := bird_timer > 0.0
+		bird_timer -= dt
+		if bird_phase == "rest" and bird_timer <= 0.0 and wind_phase == "rest" and interruption_safe_timer <= 0.0:
+			bird_phase = "approach"
+			bird_timer = BIRD_APPROACH
+			bird_entry_side = _random_sign()
+			bird_dirs = BIRD_PATTERNS[_rng.randi_range(0, BIRD_PATTERNS.size() - 1)].duplicate()
+			bird_dir = bird_dirs[1]
+			bird_response = 0
+			events.append({"type": "birds", "entry_side": bird_entry_side})
+		elif bird_phase == "approach" and bird_timer <= 0.0:
+			bird_phase = "warn"
+			bird_timer = BIRD_WARN
+			events.append({"type": "birds_arrived", "dir": bird_dir})
+		elif bird_phase == "warn":
+			if bird_had_time and bird_response == 0 and absf(lean) > 0.5:
+				bird_response = 1 if lean > 0.0 else -1
+			if bird_response != 0 or bird_timer <= 0.0:
+				bird_phase = "rest"
+				bird_timer = BIRD_REST
+				bird_gust_timer = BIRD_GUST_DURATION
 				stage_push -= bird_dir * BIRD_GUST_PUSH
-				if bird_gust_timer <= 0.0:
-					interruption_safe_timer = INTERRUPTION_SAFE_PERIOD
-			var bird_had_time := bird_timer > 0.0
-			bird_timer -= dt
-			if bird_phase == "rest" and bird_timer <= 0.0 and wind_phase == "rest" and interruption_safe_timer <= 0.0:
-				bird_phase = "approach"
-				bird_timer = BIRD_APPROACH
-				bird_entry_side = _random_sign()
-				bird_dirs = BIRD_PATTERNS[_rng.randi_range(0, BIRD_PATTERNS.size() - 1)].duplicate()
-				bird_dir = bird_dirs[1]
-				bird_response = 0
-				events.append({"type": "birds", "entry_side": bird_entry_side})
-			elif bird_phase == "approach" and bird_timer <= 0.0:
-				bird_phase = "warn"
-				bird_timer = BIRD_WARN
-				events.append({"type": "birds_arrived", "dir": bird_dir})
-			elif bird_phase == "warn":
-				if bird_had_time and bird_response == 0 and absf(lean) > 0.5:
-					bird_response = 1 if lean > 0.0 else -1
-				if bird_response != 0 or bird_timer <= 0.0:
-					bird_phase = "rest"
-					bird_timer = BIRD_REST
-					bird_gust_timer = BIRD_GUST_DURATION
-					stage_push -= bird_dir * BIRD_GUST_PUSH
-					tilt_vel -= bird_dir * BIRD_GUST_IMPULSE
-					var survived := bird_check(bird_response, bird_dir)
-					if survived:
-						events.append({"type": "birds_pass"})
-					events.append({"type": "bird_gust", "dir": -bird_dir})
-					if not survived:
-						_fall("birds", events, -bird_dir)
-						return events
+				tilt_vel -= bird_dir * BIRD_GUST_IMPULSE
+				var survived := bird_check(bird_response, bird_dir)
+				if survived:
+					events.append({"type": "birds_pass"})
+				events.append({"type": "bird_gust", "dir": -bird_dir})
+				if not survived:
+					_fall("birds", events, -bird_dir)
+					return events
 	if tension_enabled():
 		tension += dt * TENSION_RATE
 		stage_push += sin(time * 11.0) * tension * TENSION_JITTER
@@ -202,9 +188,6 @@ func update(delta: float, lean: float, gust_response: int = 0) -> Array[Dictiona
 			tension = 1.0
 			_fall("snap", events)
 			return events
-	if sway_enabled():
-		sway = sin(stage_time * SWAY_SPEED)
-		stage_push += sway * SWAY_PUSH
 	push = stage_push
 	var lean_input := clampf(lean, -1.0, 1.0)
 	var kick := LEAN_START_KICK if absf(lean_input) > absf(last_lean_input) else LEAN_KICK
@@ -281,9 +264,6 @@ func try_step() -> String:
 	var result := "ok"
 	if on_rope and tension_enabled():
 		tension = minf(0.99, tension + TENSION_PER_STEP)
-	if on_rope and sway_enabled() and not sway_safe(sway):
-		tilt_vel += (1 if sway >= 0.0 else -1) * SWAY_SHOVE
-		result = "shove"
 	if on_rope:
 		tilt_vel += _rng.randf_range(-0.3, 0.3)
 	step += 1
@@ -366,5 +346,4 @@ func _reset_stage() -> void:
 	bird_gust_timer = 0.0
 	interruption_safe_timer = 0.0
 	tension = 0.0
-	sway = 0.0
 	push = 0.0

@@ -58,12 +58,12 @@ func _ready() -> void:
 
 
 func show_status(tower: int, step: int, steps: int, kind: String, tilt: float, cue: String, tension: float = 0.0, run_seconds: float = 0.0) -> void:
-	_progress.text = "TOWER %02d / 04     STEP %02d / %02d" % [tower, step, steps]
+	_progress.text = "TOWER %02d / %02d     STEP %02d / %02d" % [tower, TightropeRules.TOWER_COUNT, step, steps]
 	_stage.text = kind.to_upper()
 	var elapsed_tenths := roundi(maxf(0.0, run_seconds) * 10.0)
 	_run_timer.text = "TIME %02d:%02d.%d" % [floori(float(elapsed_tenths) / 600.0), floori(float(elapsed_tenths % 600) / 10.0), elapsed_tenths % 10]
 	_cue.text = cue
-	_wire_gauge_panel.visible = tower >= 3
+	_wire_gauge_panel.visible = tower >= TightropeRules.TOWER_COUNT
 	_wire_gauge.set_tension(tension)
 	_balance.value = clampf((tilt + 1.0) * 50.0, 0.0, 100.0)
 	var fill := _balance.get_theme_stylebox("fill") as StyleBoxFlat
@@ -222,10 +222,10 @@ func _build() -> void:
 	var header := HBoxContainer.new()
 	header.add_theme_constant_override("separation", 4)
 	top_box.add_child(header)
-	_progress = _label("TOWER 01 / 04     STEP 00 / 09", 11, MUTED)
+	_progress = _label("TOWER 01 / %02d     STEP 00 / %02d" % [TightropeRules.TOWER_COUNT, TightropeRules.STEPS_PER_TOWER], 11, MUTED)
 	_progress.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(_progress)
-	for index in 4:
+	for index in TightropeRules.TOWER_COUNT:
 		var mark := Panel.new()
 		mark.custom_minimum_size = Vector2(12, 3)
 		mark.add_theme_stylebox_override("panel", _flat(Color("5b586f"), 2))
@@ -444,7 +444,7 @@ func _build_title() -> PanelContainer:
 	_title_row(tasks, "GUST WARNING", "A flag shows the side the gust comes from. Lean away from the flag within one second.")
 	_title_row(tasks, "FLANKER BIRDS", "Three birds fly in. Lean the way the centre bird points and ignore the outer two.")
 	_title_row(tasks, "WIRE TENSION", "The gauge climbs with time and steps. Press Space before the needle reaches red.")
-	_title_row(tasks, "SWAY", "The rope swings on the last crossing. Step when it is near the centre.")
+	_title_row(tasks, "THREE CROSSINGS", "Each crossing adds an interruption and keeps the earlier ones. The last one runs all three.")
 	box.add_child(_title_spacer(8))
 
 	_title_prompt = _label("PRESS SPACE TO START", 16, MINT)

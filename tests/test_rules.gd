@@ -14,8 +14,7 @@ func _initialize() -> void:
 	_test_birds()
 	_test_interruption_safe_period()
 	_test_tension()
-	_test_sway()
-	_test_stage_four_combo()
+	_test_final_stage_combo()
 	_test_determinism()
 	_test_full_run(11)
 	_test_full_run(29)
@@ -71,12 +70,14 @@ func _test_steps_and_checkpoints() -> void:
 	_check(run.try_step() == "blocked" and not run.on_rope, "second step waits for the first step to reach the rope")
 	run.reach_rope()
 	_check(run.on_rope, "first completed step activates balance")
-	for index in 8:
+	for index in Rules.STEPS_PER_TOWER - 1:
 		run.time += 0.5
 		run.tilt = 0.0
 		var result := run.try_step()
-		if index == 7:
-			_check(result == "tower" and run.tower == 2 and run.step == 0, "nine steps reach tower two")
+		if index == Rules.STEPS_PER_TOWER - 2:
+			_check(result == "tower" and run.tower == 2 and run.step == 0, "%d steps reach tower two" % Rules.STEPS_PER_TOWER)
+		else:
+			_check(result == "ok" and run.tower == 1, "step %d stays on the first rope" % (index + 2))
 	run.tower = 3
 	run.checkpoint_tower = 3
 	run.time += 0.5
@@ -355,30 +356,17 @@ func _test_tension() -> void:
 	_check(run.state == "falling" and events.back().get("reason") == "snap", "full tension snaps rope")
 
 
-func _test_sway() -> void:
-	var run := Rules.new(6)
-	run.tower = 4
-	run.sway = 0.9
-	_check(run.try_step() == "ok" and run.step == 1, "first step is safe from sway")
-	run.reach_rope()
-	run.time += 0.5
-	_check(run.try_step() == "shove" and run.step == 2, "unsafe sway shoves after entering rope")
-	var safe := Rules.new(6)
-	safe.tower = 4
-	safe.sway = 0.05
-	_enter_rope(safe)
-	safe.time += 0.5
-	_check(safe.try_step() == "ok", "safe sway allows step")
-
-
-func _test_stage_four_combo() -> void:
+func _test_final_stage_combo() -> void:
 	var run := Rules.new(17)
-	run.tower = 4
-	_check(run.birds_enabled() and run.tension_enabled() and run.sway_enabled(), "stage four enables birds, tension, and sway alongside wind")
+	run.tower = Rules.TOWER_COUNT
+	_check(run.stage_kind() == "Tension" and run.birds_enabled() and run.tension_enabled(), "final stage enables birds and tension alongside wind")
+	_check(Rules.new(1).birds_enabled() == false and Rules.new(1).tension_enabled() == false, "first stage has wind only")
+	var second := Rules.new(1)
+	second.tower = 2
+	_check(second.birds_enabled() and not second.tension_enabled(), "second stage adds birds and keeps tension for the final stage")
 	_enter_rope(run)
 	var saw_birds := false
 	var saw_wind := false
-	var saw_sway := false
 	var released_tension := false
 	for frame in 60 * 12:
 		run.tilt = 0.0
@@ -390,24 +378,22 @@ func _test_stage_four_combo() -> void:
 				saw_birds = true
 			elif event["type"] == "gust_pass":
 				saw_wind = true
-		saw_sway = saw_sway or absf(run.sway) > 0.1
 		if run.tension > 0.5:
 			released_tension = run.release() == "released" or released_tension
-		if saw_birds and saw_wind and saw_sway and released_tension:
+		if saw_birds and saw_wind and released_tension:
 			break
-	_check(run.state == "walking" and saw_birds and saw_wind and saw_sway and released_tension, "stage four runs all four interruptions and lets the player pass them")
+	_check(run.state == "walking" and saw_birds and saw_wind and released_tension, "final stage runs all three interruptions and lets the player pass them")
 
 	var step_run := Rules.new(18)
-	step_run.tower = 4
+	step_run.tower = Rules.TOWER_COUNT
 	_enter_rope(step_run)
 	step_run.time += 0.5
-	step_run.sway = 0.9
 	step_run.tension = 0.1
-	_check(step_run.try_step() == "shove" and is_equal_approx(step_run.tension, 0.17), "stage four step applies sway and tension together")
-	_check(step_run.release() == "released" and is_zero_approx(step_run.tension), "stage four can release tension")
+	_check(step_run.try_step() == "ok" and is_equal_approx(step_run.tension, 0.1 + Rules.TENSION_PER_STEP), "final stage step adds tension")
+	_check(step_run.release() == "released" and is_zero_approx(step_run.tension), "final stage can release tension")
 	step_run.tension = 0.995
 	var snap_events := step_run.update(0.1, 0.0)
-	_check(step_run.state == "falling" and snap_events.any(func(event: Dictionary) -> bool: return event.get("reason") == "snap"), "stage four wire still snaps at full tension")
+	_check(step_run.state == "falling" and snap_events.any(func(event: Dictionary) -> bool: return event.get("reason") == "snap"), "final stage wire still snaps at full tension")
 
 
 func _test_determinism() -> void:
@@ -425,10 +411,9 @@ func _test_determinism() -> void:
 func _test_full_run(seed_value: int) -> void:
 	var run := Rules.new(seed_value)
 	var since_step := 0.0
-	var stage_four_birds := false
-	var stage_four_wind := false
-	var stage_four_tension := false
-	var stage_four_sway := false
+	var final_stage_birds := false
+	var final_stage_wind := false
+	var final_stage_tension := false
 	for tick in 60 * 400:
 		var target := 0.0
 		if run.birds_enabled() and run.bird_phase == "warn":
@@ -437,21 +422,21 @@ func _test_full_run(seed_value: int) -> void:
 		var gust_response := -run.wind_flag_side if run.wind_phase == "react" else 0
 		var events := run.update(1.0 / 60.0, lean, gust_response)
 		for event in events:
-			if run.tower == 4:
-				stage_four_birds = stage_four_birds or event["type"] == "birds"
-				stage_four_wind = stage_four_wind or event["type"] == "gust_cue"
+			if run.tower == Rules.TOWER_COUNT:
+				final_stage_birds = final_stage_birds or event["type"] == "birds"
+				final_stage_wind = final_stage_wind or event["type"] == "gust_cue"
 			if event["type"] == "fall":
 				run.respawn()
-		if run.tower == 4:
-			stage_four_sway = stage_four_sway or absf(run.sway) > 0.1
 		if run.tension_enabled() and run.tension > 0.6:
-			stage_four_tension = stage_four_tension or run.tower == 4
+			final_stage_tension = final_stage_tension or run.tower == Rules.TOWER_COUNT
 			run.release()
 		since_step += 1.0 / 60.0
 		var can_step := since_step > 0.5 and absf(run.tilt) < 0.35
-		if run.sway_enabled():
-			can_step = can_step and absf(run.sway) < 0.2
 		if run.birds_enabled() and run.bird_phase == "warn":
+			can_step = false
+		# On the last rope, hold short of the roof until the wind and the birds have
+		# both had a turn, so the test proves they stack with the tension gauge.
+		if run.tower == Rules.TOWER_COUNT and run.step >= Rules.STEPS_PER_TOWER - 2 and not (final_stage_birds and final_stage_wind):
 			can_step = false
 		if can_step:
 			var result := run.try_step()
@@ -462,7 +447,7 @@ func _test_full_run(seed_value: int) -> void:
 			if result == "tower":
 				run.reach_tower()
 			if result == "won":
-				_check(run.state == "won" and run.tower == 4, "seed %d win state" % seed_value)
-				_check(stage_four_birds and stage_four_wind and stage_four_tension and stage_four_sway, "seed %d encountered all four minigames in stage four" % seed_value)
+				_check(run.state == "won" and run.tower == Rules.TOWER_COUNT, "seed %d win state" % seed_value)
+				_check(final_stage_birds and final_stage_wind and final_stage_tension, "seed %d encountered all three minigames in the final stage" % seed_value)
 				return
 	_check(false, "seed %d could not complete course" % seed_value)

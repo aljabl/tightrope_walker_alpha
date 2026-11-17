@@ -25,18 +25,17 @@ Feet do not have to alternate on the keyboard. Balance and interruptions only be
 
 ### The course
 
-Four crossings of nine steps each. Reaching a tower sets a checkpoint and shows a `TOWER <n>: <STAGE>` title. The top banner shows the tower, step count, stage name, run timer and a cue line that tells you what to watch for. A Space prompt appears only when Space does something (release tension, or respawn after a fall). Each interruption ends with a `PASS` or `MISS` toast (`FAIL` when the wire snaps).
+Four towers, three crossings of thirteen steps each. Reaching a tower sets a checkpoint and shows a `TOWER <n>: <STAGE>` title. The top banner shows the tower, step count, stage name, run timer and a cue line that tells you what to watch for. A Space prompt appears only when Space does something (release tension, or respawn after a fall). Each interruption ends with a `PASS` or `MISS` toast (`FAIL` when the wire snaps).
 
 Balance is an inverted pendulum: the further you tilt, the faster you tip. Small, early corrections with **Q/P** keep the pole level. If the tilt reaches the limit you fall to the street; press **Space** (or wait) to respawn at the last tower you reached. Falls are counted.
 
 Each crossing adds an interruption and keeps the earlier ones:
 
 1. **Gust Warning** (every crossing). A flag appears for a moment on the side the gust will come from, then a one-second response window opens. Your first lean decides: lean **away from the flag** to pass. Leaning toward it, or not leaning in time, triggers a strong gust that knocks you off. Gusts come every few seconds and take turns with the birds so cues never overlap.
-2. **Flanker Birds** (crossings 2 and 4). Three birds fly in from one side. When they arrive you have one second to lean **the way the centre bird points**. The two outer birds sometimes point the other way; ignore them. Your first lean counts. A gust accompanies every bird pass; the correct lean rides it out, a wrong or missing lean drops you.
-3. **Wire Tension** (crossings 3 and 4). The corner gauge rises steadily and jumps with each step, and the wire jitters more as it climbs. Press **Space** to release the tension (half-second cooldown). When the needle reaches the red range at 80% a countdown bar appears under the gauge; if it runs out the wire snaps and you fall.
-4. **Sway** (crossing 4). The rope swings side to side while all three interruptions run together. Stepping while the rope is away from centre shoves you, so time your steps to the sway.
+2. **Flanker Birds** (crossings 2 and 3). Three birds fly in from one side. When they arrive you have one second to lean **the way the centre bird points**. The two outer birds sometimes point the other way; ignore them. Your first lean counts. A gust accompanies every bird pass; the correct lean rides it out, a wrong or missing lean drops you.
+3. **Wire Tension** (crossing 3). The corner gauge rises steadily and jumps with each step, and the wire jitters more as it climbs. Press **Space** to release the tension (half-second cooldown). When the needle reaches the red range at 80% a countdown bar appears under the gauge; if it runs out the wire snaps and you fall. On this crossing the gusts, the birds and the gauge all run together.
 
-The sky runs from blue daylight through sunset and dusk to night across the four crossings: the sun sets during the second crossing and the moon rises through the third and fourth.
+The sky runs from blue daylight through sunset to night across the three crossings: the sun sets during the second crossing and the moon rises during the third.
 
 Stepping off the last rope opens the finish card with your time, falls and best time this session. **Play again** restarts; **Stargaze** plays the ending camera move.
 
@@ -50,7 +49,7 @@ godot --headless --path . --script res://tests/test_rules.gd
 godot --headless --path . --script res://tests/test_scene.gd
 ```
 
-`test_rules.gd` covers path layout, cooldowns, tower transitions, checkpoints, gust warnings, birds, tension, sway, deterministic seeds and two full successful runs. `test_scene.gd` checks skyscraper construction, the four sky stages and celestial motion, HUD creation, gust flag placement and step wiring.
+`test_rules.gd` covers path layout, cooldowns, tower transitions, checkpoints, gust warnings, birds, tension, the stacked final stage, deterministic seeds and two full successful runs. `test_scene.gd` checks skyscraper construction, the three sky stages and celestial motion, HUD creation, the title screen, gust flag placement and step wiring.
 
 ## Current limits
 
