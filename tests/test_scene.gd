@@ -341,6 +341,21 @@ func _process(_delta: float) -> bool:
 		printerr("FAIL: opening text or control hint appeared")
 		quit(1)
 		return true
+	var wind_loop := game.get_node_or_null("Wind Loop") as AudioStreamPlayer
+	var wind_stream := wind_loop.stream as AudioStreamWAV if wind_loop != null else null
+	if wind_loop == null or wind_stream == null or wind_stream.loop_mode != AudioStreamWAV.LOOP_FORWARD or wind_stream.loop_end <= 0 or not wind_loop.playing:
+		printerr("FAIL: the wind loop is not playing as a forward loop")
+		quit(1)
+		return true
+	var sfx: Dictionary = game.get("_sfx")
+	if sfx.size() != 10 or game.get_node_or_null("Side Cue") == null or (game.get_node_or_null("Side Cue") as AudioStreamPlayer3D).attenuation_model != AudioStreamPlayer3D.ATTENUATION_DISABLED:
+		printerr("FAIL: sound effect players or the positional side cue are missing: %d" % sfx.size())
+		quit(1)
+		return true
+	if not is_equal_approx(wind_loop.volume_db, float(game.get("MASTER_VOLUME_DB")) + float(game.get("WIND_INTRO_DB"))):
+		printerr("FAIL: wind loop did not start at the intro level")
+		quit(1)
+		return true
 	var title_screen: PanelContainer = hud.get("_title")
 	if title_screen == null or not title_screen.visible or not hud.call("is_title_visible"):
 		printerr("FAIL: title screen was not showing during the opening pan")
